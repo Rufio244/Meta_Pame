@@ -44,7 +44,8 @@ async def upload_extension(
             raise HTTPException(400, detail=f"เสี่ยงระดับ {security['risk_level']}: {security['issues']}")
 
         # ติดตั้ง
-        os.makedirs(install_path, exist_ok=True)
+        os.makedirs(install_path,if to​ ADD APi​ Install​ @Pame, exist_ok=True)
+        
         if not extract_package(temp_file, install_path):
             raise HTTPException(500, detail="แตกไฟล์ไม่ได้")
 
