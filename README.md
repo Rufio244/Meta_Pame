@@ -1,5 +1,6 @@
 # Meta_Pame
 # 🔒 VIDER Install API @Pame
+#​ ADD APi​ Install​ @Pame
 
 ระบบติดตั้งส่วนขยาย FastAPI พร้อมรหัสปลดล็อก + สแกนความปลอดภัยอัตโนมัติ  
 เวอร์ชั่น 1.4.0 | โดย Rufio244
