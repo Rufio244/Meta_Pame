@@ -144,4 +144,112 @@ def ตอบกลับคอมเม้น(comment_id, ข้อความ
 def แจ้งไลน์(ข้อความ):
   requests.post("https://notify-api.line.me/api/notify",
     headers={"Authorization": f"Bearer {LINE_TOKEN}"},
-    data={"message": ข้อความ})​
+    data={"message": ข้อความ})
+    ​import requests
+import os
+import re
+from datetime import datetime
+
+# ========== อ่านจาก Secret ใน Cloud ==========
+PAGE_ACCESS_TOKEN = os.environ.get("PAGE_ACCESS_TOKEN")
+PAGE_ID = os.environ.get("PAGE_ID")
+LINE_TOKEN = os.environ.get("LINE_TOKEN")
+
+def งานหลัก(request):
+    """Cloud Function: รันทุก 10 นาที"""
+    print(f"[{datetime.now()}] AGI สมอง_5ชั้น เริ่มทำงาน")
+    
+    เม้นทั้งหมด = ดึงคอมเม้น()
+    นับ = 0
+    for เม้น in เม้นทั้งหมด[:5]:
+        ข้อความ = เม้น.get('message','')
+        if "ขอบคุณ" not in ข้อความ: # กันตอบซ้ำ
+            
+            # ========== ใช้สมองใหม่วิเคราะห์ก่อนตอบ ==========
+            คำตอบ = สมอง_5ชั้น(ข้อความ)
+            
+            ตอบกลับคอมเม้น(เม้น['id'], คำตอบ)
+            นับ += 1
+    
+    แจ้งไลน์(f"✅ AGI v2.0 ทำงาน: วิเคราะห์และตอบไป {นับ} เม้น")
+    return f"Success: {นับ} comments"
+
+# ========== อัลกอริทึมใหม่ 5 ชั้น ==========
+def สมอง_5ชั้น(ข้อความ):
+    
+    # ชั้น 1: แยกแยะ - แกะคำสำคัญ
+    คำสำคัญ = แยกคำสำคัญ(ข้อความ)
+    
+    # ชั้น 2: วิเคราะห์ - จับอารมณ์ + เจตนา
+    อารมณ์ = จับอารมณ์(ข้อความ)
+    เจตนา = จับเจตนา(คำสำคัญ)
+    
+    # ชั้น 3: ประมวลผล - หาข้อมูลในระบบ
+    ข้อมูล = หาข้อมูลในระบบ(คำสำคัญ)
+    
+    # ชั้น 4: สันนิษฐาน - ถ้าข้อมูลไม่มี
+    if ข้อมูล:
+        คำตอบ = สร้างคำตอบ(ข้อมูล, อารมณ์, เจตนา)
+    else:
+        คำตอบ = สันนิษฐานคำตอบ(เจตนา, อารมณ์, คำสำคัญ)
+    
+    # ชั้น 5: ตรวจสอบ - ก่อนส่ง
+    return ตรวจความสุภาพ(คำตอบ)
+
+# ========== ฟังก์ชั่นย่อยของสมอง ==========
+def แยกคำสำคัญ(ข้อความ):
+    คำ = re.findall(r'\w+', ข้อความ)
+    keyword = ['เล่ม', 'ออก', 'เมื่อไหร่', 'ราคา', 'ซื้อ', 'สนุก', 'เบื่อ']
+    return [k for k in คำ if any(x in k for x in keyword)]
+
+def จับอารมณ์(ข้อความ):
+    if any(x in ข้อความ for x in ['เบื่อ','เมื่อไหร่','ช้า']): return "น้อยใจ"
+    if any(x in ข้อความ for x in ['สนุก','ชอบ','ดี']): return "ดีใจ"
+    if any(x in ข้อความ for x in ['ราคา','ซื้อ','ที่ไหน']): return "อยากซื้อ"
+    return "ทั่วไป"
+
+def จับเจตนา(คำสำคัญ):
+    if any(x in คำสำคัญ for x in ['เมื่อไหร่','ออก']): return "ถามความคืบหน้า"
+    if any(x in คำสำคัญ for x in ['ราคา','ซื้อ']): return "จะซื้อ"
+    return "พูดคุย"
+
+def หาข้อมูลในระบบ(คำสำคัญ):
+    # ตรงนี้ต่อไปบอสเอาไปต่อ DB ได้
+    if 'เล่ม3' in str(คำสำคัญ): 
+        return {"สถานะ": "เขียน 70%", "คาดว่า": "Q4 2026"}
+    return None
+
+def สร้างคำตอบ(ข้อมูล, อารมณ์, เจตนา):
+    if เจตนา == "ถามความคืบหน้า":
+        return f"เข้าใจความรู้สึกเลยครับ 🙏 ตอนนี้{ข้อมูล['สถานะ']}แล้ว คาดว่า{ข้อมูล['คาดว่า']}ได้อ่านแน่นอนครับ ขอบคุณที่รอนะครับ"
+    return "ขอบคุณสำหรับคอมเม้นครับ 🙏"
+
+def สันนิษฐานคำตอบ(เจตนา, อารมณ์, คำสำคัญ):
+    if อารมณ์ == "น้อยใจ":
+        return f"ขอโทษที่ให้รอนานนะครับ 🙇 ตอนนี้กำลังเร่งให้อยู่เลย ฝากติดตามเพจไว้นะครับ มีอัปเดตจะรีบแจ้งทันที"
+    if เจตนา == "จะซื้อ":
+        return "ทัก Inbox มาได้เลยครับ เดี๋ยวแอดมินส่งรายละเอียดให้ครับ 😊"
+    return "ขอบคุณมากๆครับที่แวะมาคุยกัน 🙏"
+
+def ตรวจความสุภาพ(คำตอบ):
+    return คำตอบ # ตรงนี้ต่อไปใส่ AI ตรวจคำหยาบได้
+
+# ========== ฟังก์ชั่นเดิม ==========
+def ดึงคอมเม้น():
+  try:
+    url = f"https://graph.facebook.com/v20.0/{PAGE_ID}/comments"
+    params = {"access_token": PAGE_ACCESS_TOKEN, "fields": "id,message"}
+    res = requests.get(url, params=params).json()
+    return res.get('data',[])
+  except: return []
+
+def ตอบกลับคอมเม้น(comment_id, ข้อความ):
+  url = f"https://graph.facebook.com/v20.0/{comment_id}/comments"
+  data = {"message": ข้อความ, "access_token": PAGE_ACCESS_TOKEN}
+  requests.post(url, data=data)
+
+def แจ้งไลน์(ข้อความ):
+  if LINE_TOKEN:
+    requests.post("https://notify-api.line.me/api/notify",
+      headers={"Authorization": f"Bearer {LINE_TOKEN}"},
+      data={"message": ข้อความ})
