@@ -253,3 +253,87 @@ def แจ้งไลน์(ข้อความ):
     requests.post("https://notify-api.line.me/api/notify",
       headers={"Authorization": f"Bearer {LINE_TOKEN}"},
       data={"message": ข้อความ})
+import requests
+import os
+import re
+from datetime import datetime
+
+PAGE_ACCESS_TOKEN = os.environ.get("PAGE_ACCESS_TOKEN")
+PAGE_ID = os.environ.get("PAGE_ID")
+LINE_TOKEN = os.environ.get("LINE_TOKEN")
+
+# ========== สวิตช์สำคัญ ==========
+โหมด = "SANDBOX" # SANDBOX = เทสในระบบ, LIVE = ตอบจริง
+ความจำ = {}
+LOG_การเทส = []
+
+def งานหลัก(request):
+    print(f"[{datetime.now()}] AGI v4.1 โหมด: {โหมด}")
+    
+    เม้นทั้งหมด = ดึงคอมเม้น()
+    
+    for เม้น in เม้นทั้งหมด[:5]:
+        comment_id = เม้น['id']
+        user_id = เม้น.get('from',{}).get('id', 'guest')
+        ข้อความ = เม้น.get('message','')
+        ชื่อ = เม้น.get('from',{}).get('name','คุณ')
+
+        # ========== ขั้นตอนที่ 1: สร้างในระบบก่อน ==========
+        คำตอบ_ที่สร้าง = AGI_สมองรวม(user_id, ชื่อ, ข้อความ)
+        
+        # ========== ขั้นตอนที่ 2: QC ในระบบตัวเอง ==========
+        ผ่านQC = ตรวจสอบคุณภาพ(คำตอบ_ที่สร้าง, ข้อความ)
+        LOG_การเทส.append(f"คำถาม:{ข้อความ} | คำตอบ:{คำตอบ_ที่สร้าง} | QC:{ผ่านQC}")
+        
+        # ========== ขั้นตอนที่ 3: ตัดสินใจปล่อยออกนอก ==========
+        if โหมด == "LIVE" and ผ่านQC == "ผ่าน":
+            ตอบกลับคอมเม้น(comment_id, คำตอบ_ที่สร้าง) # ถึงจะตอบจริง
+            ผล = "ปล่อยจริง"
+        else:
+            ผล = "เก็บไว้ในระบบ" # ไม่ตอบจริง แค่บันทึก
+    
+    สรุป = f"เทส {len(LOG_การเทส)} อัน | ปล่อยจริง: {ผล}"
+    แจ้งไลน์(f"✅ AGI v4.1: {สรุป}\nLOGล่าสุด: {LOG_การเทส[-1]}")
+    return สรุป
+
+# ========== ระบบ QC ภายใน ==========
+def ตรวจสอบคุณภาพ(คำตอบ, คำถาม):
+    # กฏ1: ห้ามมีคำหยาบ
+    if any(x in คำตอบ for x in ['ด่า','โง่','ควาย']): return "ไม่ผ่าน"
+    # กฏ2: ถ้าถามซื้อ ต้องมีคำว่า Inbox
+    if 'ราคา' in คำถาม and 'Inbox' not in คำตอบ: return "ไม่ผ่าน"
+    # กฏ3: ห้ามตอบสั้นกว่า 10 ตัวอักษร
+    if len(คำตอบ) < 10: return "ไม่ผ่าน"
+    return "ผ่าน"
+
+# ========== สมองเดิม ==========
+def AGI_สมองรวม(user_id, ชื่อ, ข้อความ):
+    # ตรงนี้คือสมอง v4.0 ที่เราเทรน 7 สัญชาติญาณ
+    อารมณ์ = จับอารมณ์(ข้อความ)
+    if อารมณ์ == "โกรธ": return f"ขอโทษครับ{ชื่อ} 🙇 ผมรับฟังและจะปรับปรุงครับ"
+    if 'ราคา' in ข้อความ: return f"สวัสดีครับ{ชื่อ} 😊 รายละเอียดทัก Inbox ได้เลยครับ"
+    return f"ขอบคุณครับ{ชื่อ} 🙏 ดีใจที่แวะมาคุยกัน"
+
+def จับอารมณ์(ข้อความ):
+    if any(x in ข้อความ for x in ['เบื่อ','เมื่อไหร่','ช้า','ห่วย']): return "โกรธ"
+    return "ทั่วไป"
+
+# ========== ฟังก์ชั่นเดิม ==========
+def ดึงคอมเม้น():
+  try:
+    url = f"https://graph.facebook.com/v20.0/{PAGE_ID}/comments"
+    params = {"access_token": PAGE_ACCESS_TOKEN, "fields": "id,message,from"}
+    res = requests.get(url, params=params).json()
+    return res.get('data',[])
+  except: return []
+
+def ตอบกลับคอมเม้น(comment_id, ข้อความ):
+  url = f"https://graph.facebook.com/v20.0/{comment_id}/comments"
+  data = {"message": ข้อความ, "access_token": PAGE_ACCESS_TOKEN}
+  requests.post(url, data=data)
+
+def แจ้งไลน์(ข้อความ):
+  if LINE_TOKEN:
+    requests.post("https://notify-api.line.me/api/notify",
+      headers={"Authorization": f"Bearer {LINE_TOKEN}"},
+      data={"message": ข้อความ})
