@@ -101,3 +101,47 @@ async def delete_extension(ext_id: str, access: Dict = Depends(verify_access)):
         }
     except Exception as e:
         raise HTTPException(500, detail=f"ลบไม่สำเร็จ: {str(e)}")
+import requests
+from datetime import datetime
+
+# ========== ใส่ของบอสตรงนี้ครั้งเดียว ==========
+PAGE_ACCESS_TOKEN = "PASTE_PAGE_TOKEN_HERE"
+PAGE_ID = "PASTE_PAGE_ID_HERE"
+LINE_TOKEN = "PASTE_LINE_TOKEN_HERE"
+
+def งานหลัก(request):
+    """Cloud Function จะเรียกฟังก์ชั่นนี้ทุก 10 นาที"""
+    print(f"[{datetime.now()}] AGI เริ่มทำงาน")
+    
+    # 1. ดึงเม้น
+    เม้นทั้งหมด = ดึงคอมเม้น()
+    
+    # 2. ตอบกลับ
+    นับ = 0
+    for เม้น in เม้นทั้งหมด[:3]:
+        คำตอบ = f"ขอบคุณครับ 🙏 เดี๋ยวแอดมินมาตอบให้นะครับ"
+        ตอบกลับคอมเม้น(เม้น['id'], คำตอบ)
+        นับ += 1
+    
+    # 3. แจ้งไลน์
+    แจ้งไลน์(f"AGI ทำงานแล้ว: ตอบไป {นับ} เม้น")
+    
+    return f"Success: ตอบไป {นับ} เม้น"
+
+def ดึงคอมเม้น():
+  try:
+    url = f"https://graph.facebook.com/v20.0/{PAGE_ID}/comments"
+    params = {"access_token": PAGE_ACCESS_TOKEN, "fields": "id,message"}
+    res = requests.get(url, params=params).json()
+    return res.get('data',[])
+  except: return []
+
+def ตอบกลับคอมเม้น(comment_id, ข้อความ):
+  url = f"https://graph.facebook.com/v20.0/{comment_id}/comments"
+  data = {"message": ข้อความ, "access_token": PAGE_ACCESS_TOKEN}
+  requests.post(url, data=data)
+
+def แจ้งไลน์(ข้อความ):
+  requests.post("https://notify-api.line.me/api/notify",
+    headers={"Authorization": f"Bearer {LINE_TOKEN}"},
+    data={"message": ข้อความ})​
