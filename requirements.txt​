@@ -1,2 +1,13 @@
 requests
 functions-framework
+qrcode[pil]
+pillow
+python-dotenv
+sqlalchemy
+fastapi
+uvicorn
+streamlit
+pyzbar
+opencv-python
+rapidfuzz
+python-jose[cryptography]
