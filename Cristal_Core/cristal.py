@@ -28,3 +28,9 @@ class Cristal:
     def sync_to_all(self):
         # สั่ง Fleet ทั้งหมด + Js + Python ให้ใช้ memory เดียวกัน
         print(f"[{self.NAME} #{self.LOCK_CODE}] Syncing to Rufio_bot, Js, main.py, rufio_server.py...")
+from lock import unlock
+unlock() # <-- เพิ่มบรรทัดนี้ ล็อคทันที
+
+# โค้ดเดิม Cristal ต่อจากนี้...
+class Cristal:
+    ...
