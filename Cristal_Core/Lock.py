@@ -28,3 +28,21 @@ def unlock(input_key=None):
 if __name__ == "__main__":
     print(f"Your Master Key: {TRUE_KEY}")
     print(f"Master Code: {MASTER_CODE}")
+# Cristal_Core/lock.py - FINAL LOCK #AGI244
+import os, sys
+
+MASTER_KEY = "AGI244"
+OWNER = "Rufio244"
+
+def unlock(key=None):
+    k = key or os.getenv("CRISTAL_UNLOCK_KEY", "") or os.getenv("CRISTAL_KEY", "")
+    # รับทั้ง AGI244 / #AGI244 / CRISTAL-XXXX
+    clean = k.replace("#","").replace("CRISTAL-","").strip()
+    
+    if clean == "AGI244" or "AGI244" in k or k == MASTER_KEY:
+        print(f"💎✅ Cristal Unlocked! Owner:{OWNER} | #{MASTER_KEY}")
+        return True
+    else:
+        print(f"🔒 Cristal Locked #{MASTER_KEY} | Owner:{OWNER}")
+        print(f"🔑 Use: CRISTAL_UNLOCK_KEY=AGI244 python Cristal_Core/cristal.py")
+        sys.exit(1)
