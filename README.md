@@ -18,3 +18,4 @@ git clone https://github.com/Rufio244/Meta_Pame.git
 cd Meta_Pame
 pip install -r requirements.txt
 python main.py
+git clone git@github.com:Rufio244/Meta_Pame.git && cd Meta_Pame && python Cristal_Core/cristal.py
