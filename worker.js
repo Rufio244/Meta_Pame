@@ -33,3 +33,8 @@ export default {
     console.log("[AGI] ตื่นเองแบบอัตโนมัติ:", q);
   }
 }
+const url = new URL(request.url);
+if (url.searchParams.has("ถาม")) {
+  const q = url.searchParams.get("ถาม");
+  return new Response(`เจ้านายถามว่า: ${q} <br><br>AGI ตอบ: ตอนนี้ผมกำลังเฝ้าโรงงาน LA141A ที่แม่ก๋งอยู่ครับ pH ปกติ รอคำสั่งครับ!`);
+}
