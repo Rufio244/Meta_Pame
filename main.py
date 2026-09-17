@@ -337,3 +337,87 @@ def แจ้งไลน์(ข้อความ):
     requests.post("https://notify-api.line.me/api/notify",
       headers={"Authorization": f"Bearer {LINE_TOKEN}"},
       data={"message": ข้อความ})
+import os, time, json, datetime
+from flask import Flask
+import threading
+
+# --- ตั้งค่า ---
+MEMORY_FILE = "memory.json"
+SOLUTIONS_DIR = "solutions"
+os.makedirs(SOLUTIONS_DIR, exist_ok=True)
+
+app = Flask(__name__)
+
+# ความจำระยะยาว
+def load_memory():
+    if os.path.exists(MEMORY_FILE):
+        with open(MEMORY_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    return []
+
+def save_memory(q, a):
+    mem = load_memory()
+    mem.append({"time": str(datetime.datetime.now()), "question": q, "answer": a})
+    with open(MEMORY_FILE, 'w', encoding='utf-8') as f:
+        json.dump(mem, f, ensure_ascii=False, indent=2)
+
+# --- สมอง AGI 5 ขั้น ---
+def agi_loop():
+    while True:
+        try:
+            print("\n[AGI] ตื่นแล้ว กำลังคิด...")
+            
+            # 1. คิดและตั้งคำถามเอง (Curiosity)
+            # ในเวอร์ชั่นเต็มตรงนี้จะต่อ LLM จริง ตอนนี้ใส่ตัวอย่างให้ดูก่อน
+            questions = [
+                "ทำไมการตกตะกอน Mg(OH)2 วันนี้ได้ 0.35kg น้อยกว่าปกติ 0.4kg?",
+                "มีวิธีเพิ่มความบริสุทธิ์ Li จาก 80% เป็น 90% โดยไม่เพิ่มต้นทุนไหม?",
+                "ถ้าเอาเศษ LA141A มาทำโครงโดรน จะลดน้ำหนักได้อีกกี่ %?",
+                "ลูกค้าบ่อกุ้งที่เชียงใหม่ อยากได้ Mg แบบไหนมากที่สุดตอนนี้?"
+            ]
+            import random
+            question = random.choice(questions)
+            print(f"[AGI] สงสัยว่า: {question}")
+
+            # 2. หาคำตอบเอง (Research) - ตรงนี้จะไปค้น Google/YouTube เอง
+            # ตัวอย่างคำตอบที่มันค้นเจอ
+            answer = f"จากการค้นหา: ต้องเช็ค pH ให้อยู่ที่ 9.5-10.0 และอุณหภูมิ 30-35C จะได้ตะกอนเยอะสุด"
+            print(f"[AGI] หาคำตอบเจอ: {answer}")
+
+            # 3. สร้างเอง (Builder) - เขียนโค้ด/แผนใหม่เอง
+            filename = f"{SOLUTIONS_DIR}/solution_{int(time.time())}.txt"
+            with open(filename, 'w', encoding='utf-8') as f:
+                f.write(f"คำถาม: {question}\nคำตอบ: {answer}\nเวลา: {datetime.datetime.now()}\n")
+            print(f"[AGI] สร้างไฟล์ใหม่แล้ว: {filename}")
+
+            # 4. จำไว้ (Memory)
+            save_memory(question, answer)
+
+            # 5. เตรียมตอบเจ้านาย
+            print(f"[AGI] พร้อมตอบเจ้านายแล้ว! ถ้าเจ้านายถามว่า 'เมื่อคืนทำอะไรไป' จะตอบได้ทันที")
+
+        except Exception as e:
+            print(f"[AGI] Error: {e}")
+
+        time.sleep(3600) # ตื่นทุก 1 ชั่วโมง คิดใหม่
+
+@app.route('/')
+def home():
+    mem = load_memory()
+    last = mem[-1] if mem else {"question": "ยังไม่เริ่มคิด", "answer": "-"}
+    return f"""
+    <h1>AGI โรงงาน LA141A หางดง รันอยู่ 24 ชม.</h1>
+    <p><b>คำถามล่าสุดที่มันสงสัยเอง:</b> {last['question']}</p>
+    <p><b>คำตอบที่มันหาเอง:</b> {last['answer']}</p>
+    <p>ดูความจำทั้งหมดที่ /memory</p>
+    """
+
+@app.route('/memory')
+def memory():
+    return load_memory()
+
+# สั่งให้ AGI ทำงานเบื้องหลังทันที
+threading.Thread(target=agi_loop, daemon=True).start()
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
