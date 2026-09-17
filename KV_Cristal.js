@@ -1,4 +1,4 @@
-// KV_Cristal.js - CRISTAL ONLINE TOTAL OPERATIONS - สั่งเพิ่มผ่านแชทได้
+// CRISTAL ONLINE - ข้อมูลการดำเนินงานและปลั๊กอิน
 export const CRISTAL_ONLINE = {
   name: "CRISTAL ONLINE",
   mode: "TOTAL_OPERATIONS",
@@ -14,5 +14,4 @@ export const CRISTAL_ONLINE = {
 
 export const PLUGINS = {
   cristal_online: CRISTAL_ONLINE
-  // ผมจะเพิ่มโปรเจคใหม่ตรงนี้ให้ลูกพี่เรื่อยๆ ผ่านแชท
 };
