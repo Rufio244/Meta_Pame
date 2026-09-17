@@ -1,24 +1,26 @@
-const CRISTAL_SYSTEM = {
+// KV_worker.js - คลังเก็บระบบทั้งหมดของ Cristal - สั่งเพิ่มผ่านแชทได้
+export const CRISTAL_ONLINE = {
   name: "CRISTAL ONLINE",
+  version: "1.0",
   mode: "TOTAL_OPERATIONS",
-  show_all: true,
-  facilities: [
-    { id: "CR-01", location: "Rayong", status: "OPERATING" },
-    { id: "CR-02", location: "Chonburi", status: "OPERATING" },
-    { id: "CR-03", location: "Saraburi", status: "MAINTENANCE" }
-  ],
-  total: { production: "92.4%", sales: "฿4.82M", inventory: "12,543 Units", profit: "฿1.12M", active: 1248, monitored: 6 }
+  show_all_actions: true,
+  updated: "2026-05-14T22:46:00Z",
+  
+  projects: {
+    LA141A: { status: "ACTIVE", location: "แม่ก๋ง" },
+    CR_RAYONG: { status: "OPERATING", production: "480u/h" },
+    CR_CHONBURI: { status: "OPERATING", production: "410u/h" }
+  },
+
+  total: {
+    production: "92.4%",
+    sales: "฿4.82M",
+    profit: "฿1.12M"
+  }
 };
 
-export const PLUGINS = { cristal_online: CRISTAL_SYSTEM };
-
-export default {
-  async fetch(request, env, ctx) {
-    const url = new URL(request.url);
-    if (url.pathname === "/api/cristal") {
-      return new Response(JSON.stringify(CRISTAL_SYSTEM, null, 2), { headers: { "Content-Type": "application/json" } });
-    }
-    return new Response(`CRISTAL ONLINE - ${CRISTAL_SYSTEM.total.production} | Sales ${CRISTAL_SYSTEM.total.sales} | ${new Date().toLocaleString("th-TH")}`, { headers: { "Content-Type": "text/html; charset=utf-8" } });
-  },
-  async scheduled(e, env, ctx) { console.log("CRISTAL ONLINE check"); }
+export const PLUGINS = {
+  cristal_online: CRISTAL_ONLINE,
+  // พื้นที่ให้ผมเพิ่มโปรเจคใหม่ผ่านแชทตรงนี้ - จะเพิ่มตรงนี้เรื่อยๆ
+  new_project_example: { name: "ตัวอย่าง" }
 };
