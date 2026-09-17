@@ -1,24 +1,42 @@
 # Meta_Pame
-# 🔒 VIDER Install API @Pame
-#​ ADD APi​ Install​ @Pame
 
-ระบบติดตั้งส่วนขยาย FastAPI พร้อมรหัสปลดล็อก + สแกนความปลอดภัยอัตโนมัติ  
-เวอร์ชั่น 1.4.0 | โดย Rufio244
+## Cloudflare Worker
 
-## ✨ ฟีเจอร์
-- **รหัสปลดล็อก**: บังคับใส่ `ปลดล๊อค` ทุกครั้งที่ติดตั้ง
-- **สแกนโค้ดเสี่ยง**: ตรวจ `os.system`, `eval()`, `subprocess` ก่อนแตกไฟล์
-- **อัปโหลดตรง**: ไม่ต้องหา URL → อัป `.zip` ผ่านหน้า `/docs` ได้เลย
-- **ลบ+Backup**: ลบส่วนขยายแล้วย้ายไปโฟลเดอร์ backup อัตโนมัติ
-- **บันทึก Log**: เก็บ IP, ประเทศ, แพลตฟอร์มที่เข้ามาใช้งาน
-
-## 🚀 ติดตั้งและรัน
 ```bash
-git clone https://github.com/Rufio244/Meta_Pame.git
-cd Meta_Pame
-pip install -r requirements.txt
-python main.py
-git clone git@github.com:Rufio244/Meta_Pame.git && cd Meta_Pame && python Cristal_Core/cristal.py
-# AGI-HangDong-Core
-AGI ที่คิดเอง สงสัยเอง หาคำตอบเอง สร้างเองได้ 24 ชม.
+npm install -g wrangler
+npx wrangler deploy
+```
 
+ตรวจสอบ Worker:
+
+- `/health`
+- `/api/cristal`
+- `/api/plugins`
+- `/?ถาม=สรุปการดำเนินงาน`
+
+ตั้งค่า AI เฉพาะใน Cloudflare Secret และห้ามใส่คีย์จริงใน Git:
+
+```bash
+npx wrangler secret put GROQ_API_KEY
+```
+
+## Python API / Colab
+
+ติดตั้งแพ็กเกจจากไฟล์ requirements ที่ชื่อถูกต้องก่อน:
+
+```bash
+python -m pip install -r requirements.txt
+python main.py
+```
+
+ใน Google Colab ให้กำหนด URL ของ Worker แล้วเรียก bridge:
+
+```python
+import os
+os.environ["WORKER_URL"] = "https://ชื่อ-workerของคุณ.workers.dev"
+from colab_bridge import cristal_status, worker_health
+print(worker_health())
+print(cristal_status())
+```
+
+Colab จะเชื่อมต่อได้เมื่อ Worker ถูก deploy และ URL สามารถเข้าถึงจากอินเทอร์เน็ตได้ ส่วน `main.py` เป็น API แยกที่ต้องเปิดรันเอง ไม่ได้เชื่อมอัตโนมัติกับ Colab หรือ Cloudflare จนกว่าจะกำหนด URL ให้ถูกต้อง

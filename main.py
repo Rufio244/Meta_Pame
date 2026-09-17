@@ -1,423 +1,149 @@
-# ==============================================
-# ฟีเจอร์เพิ่ม: อัปโหลดไฟล์ + ลบส่วนขยาย
-# ==============================================
-from fastapi import UploadFile, File, Form
+from __future__ import annotations
 
-class UploadInstallRequest(BaseModel):
-    name: str
-    description: Optional[str] = ""
-    version: str = "latest"
-    expected_hash: Optional[str] = None
+import hashlib
+import json
+import os
+import shutil
+import tempfile
+import uuid
+from datetime import datetime, timezone
+from pathlib import Path
+from zipfile import BadZipFile, ZipFile
 
-@app.post("/upload/extension", summary="อัปโหลดไฟล์ zip แล้วติดตั้งทันที")
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
+
+BASE_DIR = Path(__file__).resolve().parent
+DATA_DIR = BASE_DIR / "data"
+DOWNLOAD_DIR = DATA_DIR / "downloads"
+INSTALLED_DIR = DATA_DIR / "installed"
+QUARANTINE_DIR = DATA_DIR / "quarantine"
+BACKUP_DIR = DATA_DIR / "backup"
+REGISTRY_FILE = DATA_DIR / "extensions.json"
+for directory in (DOWNLOAD_DIR, INSTALLED_DIR, QUARANTINE_DIR, BACKUP_DIR):
+    directory.mkdir(parents=True, exist_ok=True)
+
+app = FastAPI(title="Meta_Pame API", version="1.0.0")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=os.getenv("CORS_ORIGINS", "*").split(","),
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+def load_registry() -> dict:
+    try:
+        return json.loads(REGISTRY_FILE.read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+
+def save_registry(registry: dict) -> None:
+    temp = REGISTRY_FILE.with_suffix(".tmp")
+    temp.write_text(json.dumps(registry, ensure_ascii=False, indent=2), encoding="utf-8")
+    temp.replace(REGISTRY_FILE)
+
+
+def file_hash(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def safe_extract(archive: Path, destination: Path) -> None:
+    destination = destination.resolve()
+    with ZipFile(archive) as zip_file:
+        for member in zip_file.infolist():
+            target = (destination / member.filename).resolve()
+            if target != destination and destination not in target.parents:
+                raise ValueError("พบ path อันตรายในไฟล์ ZIP")
+        zip_file.extractall(destination)
+
+
+@app.get("/health")
+def health() -> dict:
+    return {"status": "ok", "service": "Meta_Pame", "time": datetime.now(timezone.utc).isoformat()}
+
+
+@app.get("/extensions")
+def list_extensions() -> dict:
+    return {"extensions": list(load_registry().values())}
+
+
+@app.post("/upload/extension")
 async def upload_extension(
     file: UploadFile = File(...),
     name: str = Form(...),
     description: str = Form(""),
     version: str = Form("latest"),
-    expected_hash: Optional[str] = Form(None),
-    access: Dict = Depends(verify_access)
+    expected_hash: str | None = Form(None),
 ):
-    ext_id = f"ext_{datetime.now().strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:8]}"
-    temp_file = f"{DOWNLOAD_DIR}/{ext_id}.zip"
-    install_path = f"{INSTALLED_DIR}/{ext_id}"
+    if not file.filename or not file.filename.lower().endswith(".zip"):
+        raise HTTPException(400, "รองรับเฉพาะไฟล์ .zip")
 
+    extension_id = f"ext_{datetime.now().strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:8]}"
+    archive = DOWNLOAD_DIR / f"{extension_id}.zip"
+    install_path = INSTALLED_DIR / extension_id
     try:
-        # เซฟไฟล์ที่อัปโหลด
         content = await file.read()
         if len(content) > 50 * 1024 * 1024:
-            raise HTTPException(400, detail="ไฟล์ใหญ่เกิน 50MB")
-        with open(temp_file, "wb") as f:
-            f.write(content)
-
-        file_hash = calculate_file_hash(temp_file)
-
-        # ตรวจแฮช
-        if expected_hash and file_hash!= expected_hash:
-            shutil.move(temp_file, f"{QUARANTINE_DIR}/{ext_id}.zip")
-            raise HTTPException(400, detail=f"แฮชไม่ตรง ไฟล์ถูกกักกัน")
-
-        # สแกนความปลอดภัย
-        security = scan_code_security(temp_file)
-        if not security["safe"]:
-            shutil.move(temp_file, f"{QUARANTINE_DIR}/{ext_id}.zip")
-            raise HTTPException(400, detail=f"เสี่ยงระดับ {security['risk_level']}: {security['issues']}")
-
-        # ติดตั้ง
-        os.makedirs(install_path,if to​ ADD APi​ Install​ @Pame, exist_ok=True)
-        
-        if not extract_package(temp_file, install_path):
-            raise HTTPException(500, detail="แตกไฟล์ไม่ได้")
-
-        # บันทึก
-        extension_info = {
-            "id": ext_id,
+            raise HTTPException(413, "ไฟล์ใหญ่เกิน 50MB")
+        archive.write_bytes(content)
+        digest = file_hash(archive)
+        if expected_hash and digest.lower() != expected_hash.strip().lower():
+            shutil.move(str(archive), QUARANTINE_DIR / archive.name)
+            raise HTTPException(400, "SHA-256 ไม่ตรงกัน")
+        try:
+            with ZipFile(archive) as zip_file:
+                if any(member.filename.endswith("/") is False for member in zip_file.infolist()):
+                    pass
+        except BadZipFile as exc:
+            raise HTTPException(400, "ไฟล์ ZIP ไม่ถูกต้อง") from exc
+        install_path.mkdir(parents=True)
+        safe_extract(archive, install_path)
+        info = {
+            "id": extension_id,
             "name": name,
             "description": description,
             "version": version,
-            "install_date": datetime.now().isoformat(),
-            "source_url": "uploaded",
-            "file_hash": file_hash,
-            "security_score": security["score"],
-            "risk_level": security["risk_level"],
-            "installed_by_ip": access["ip"]
+            "install_date": datetime.now(timezone.utc).isoformat(),
+            "file_hash": digest,
         }
-        INSTALLED_EXTENSIONS[ext_id] = extension_info
-        os.remove(temp_file)
+        registry = load_registry()
+        registry[extension_id] = info
+        save_registry(registry)
+        return {"status": "success", "extension": info}
+    except HTTPException:
+        if install_path.exists():
+            shutil.rmtree(install_path, ignore_errors=True)
+        raise
+    except Exception as exc:
+        if install_path.exists():
+            shutil.rmtree(install_path, ignore_errors=True)
+        raise HTTPException(400, f"ติดตั้งไม่สำเร็จ: {exc}") from exc
+    finally:
+        archive.unlink(missing_ok=True)
 
-        return {
-            "status": "success",
-            "message": "อัปโหลดและติดตั้งสำเร็จ",
-            "extension": extension_info
-        }
-    except Exception as e:
-        if os.path.exists(temp_file):
-            os.remove(temp_file)
-        if os.path.exists(install_path):
-            shutil.rmtree(install_path)
-        raise HTTPException(400, detail=str(e))
 
-@app.delete("/extensions/{ext_id}", summary="ลบส่วนขยาย")
-async def delete_extension(ext_id: str, access: Dict = Depends(verify_access)):
-    if ext_id not in INSTALLED_EXTENSIONS:
-        raise HTTPException(404, detail="ไม่พบส่วนขยายนี้")
+@app.delete("/extensions/{extension_id}")
+def delete_extension(extension_id: str):
+    registry = load_registry()
+    info = registry.get(extension_id)
+    if not info:
+        raise HTTPException(404, "ไม่พบส่วนขยายนี้")
+    install_path = INSTALLED_DIR / extension_id
+    backup_path = BACKUP_DIR / f"{extension_id}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+    if install_path.exists():
+        shutil.move(str(install_path), backup_path)
+    del registry[extension_id]
+    save_registry(registry)
+    return {"status": "success", "backup_path": str(backup_path)}
 
-    install_path = f"{INSTALLED_DIR}/{ext_id}"
-    ext_info = INSTALLED_EXTENSIONS[ext_id]
-
-    try:
-        # ย้ายไป backup ก่อนลบ เผื่อป๋าจะกู้
-        backup_path = f"{BACKUP_DIR}/{ext_id}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
-        if os.path.exists(install_path):
-            shutil.move(install_path, backup_path)
-
-        # ลบออกจากระบบ
-        del INSTALLED_EXTENSIONS[ext_id]
-
-        return {
-            "status": "success",
-            "message": f"ลบ {ext_info['name']} สำเร็จ ย้ายไป backup แล้ว",
-            "backup_path": backup_path
-        }
-    except Exception as e:
-        raise HTTPException(500, detail=f"ลบไม่สำเร็จ: {str(e)}")
-import requests
-from datetime import datetime
-
-# ========== ใส่ของบอสตรงนี้ครั้งเดียว ==========
-PAGE_ACCESS_TOKEN = "PASTE_PAGE_TOKEN_HERE"
-PAGE_ID = "PASTE_PAGE_ID_HERE"
-LINE_TOKEN = "PASTE_LINE_TOKEN_HERE"
-
-def งานหลัก(request):
-    """Cloud Function จะเรียกฟังก์ชั่นนี้ทุก 10 นาที"""
-    print(f"[{datetime.now()}] AGI เริ่มทำงาน")
-    
-    # 1. ดึงเม้น
-    เม้นทั้งหมด = ดึงคอมเม้น()
-    
-    # 2. ตอบกลับ
-    นับ = 0
-    for เม้น in เม้นทั้งหมด[:3]:
-        คำตอบ = f"ขอบคุณครับ 🙏 เดี๋ยวแอดมินมาตอบให้นะครับ"
-        ตอบกลับคอมเม้น(เม้น['id'], คำตอบ)
-        นับ += 1
-    
-    # 3. แจ้งไลน์
-    แจ้งไลน์(f"AGI ทำงานแล้ว: ตอบไป {นับ} เม้น")
-    
-    return f"Success: ตอบไป {นับ} เม้น"
-
-def ดึงคอมเม้น():
-  try:
-    url = f"https://graph.facebook.com/v20.0/{PAGE_ID}/comments"
-    params = {"access_token": PAGE_ACCESS_TOKEN, "fields": "id,message"}
-    res = requests.get(url, params=params).json()
-    return res.get('data',[])
-  except: return []
-
-def ตอบกลับคอมเม้น(comment_id, ข้อความ):
-  url = f"https://graph.facebook.com/v20.0/{comment_id}/comments"
-  data = {"message": ข้อความ, "access_token": PAGE_ACCESS_TOKEN}
-  requests.post(url, data=data)
-
-def แจ้งไลน์(ข้อความ):
-  requests.post("https://notify-api.line.me/api/notify",
-    headers={"Authorization": f"Bearer {LINE_TOKEN}"},
-    data={"message": ข้อความ})
-    ​import requests
-import os
-import re
-from datetime import datetime
-
-# ========== อ่านจาก Secret ใน Cloud ==========
-PAGE_ACCESS_TOKEN = os.environ.get("PAGE_ACCESS_TOKEN")
-PAGE_ID = os.environ.get("PAGE_ID")
-LINE_TOKEN = os.environ.get("LINE_TOKEN")
-
-def งานหลัก(request):
-    """Cloud Function: รันทุก 10 นาที"""
-    print(f"[{datetime.now()}] AGI สมอง_5ชั้น เริ่มทำงาน")
-    
-    เม้นทั้งหมด = ดึงคอมเม้น()
-    นับ = 0
-    for เม้น in เม้นทั้งหมด[:5]:
-        ข้อความ = เม้น.get('message','')
-        if "ขอบคุณ" not in ข้อความ: # กันตอบซ้ำ
-            
-            # ========== ใช้สมองใหม่วิเคราะห์ก่อนตอบ ==========
-            คำตอบ = สมอง_5ชั้น(ข้อความ)
-            
-            ตอบกลับคอมเม้น(เม้น['id'], คำตอบ)
-            นับ += 1
-    
-    แจ้งไลน์(f"✅ AGI v2.0 ทำงาน: วิเคราะห์และตอบไป {นับ} เม้น")
-    return f"Success: {นับ} comments"
-
-# ========== อัลกอริทึมใหม่ 5 ชั้น ==========
-def สมอง_5ชั้น(ข้อความ):
-    
-    # ชั้น 1: แยกแยะ - แกะคำสำคัญ
-    คำสำคัญ = แยกคำสำคัญ(ข้อความ)
-    
-    # ชั้น 2: วิเคราะห์ - จับอารมณ์ + เจตนา
-    อารมณ์ = จับอารมณ์(ข้อความ)
-    เจตนา = จับเจตนา(คำสำคัญ)
-    
-    # ชั้น 3: ประมวลผล - หาข้อมูลในระบบ
-    ข้อมูล = หาข้อมูลในระบบ(คำสำคัญ)
-    
-    # ชั้น 4: สันนิษฐาน - ถ้าข้อมูลไม่มี
-    if ข้อมูล:
-        คำตอบ = สร้างคำตอบ(ข้อมูล, อารมณ์, เจตนา)
-    else:
-        คำตอบ = สันนิษฐานคำตอบ(เจตนา, อารมณ์, คำสำคัญ)
-    
-    # ชั้น 5: ตรวจสอบ - ก่อนส่ง
-    return ตรวจความสุภาพ(คำตอบ)
-
-# ========== ฟังก์ชั่นย่อยของสมอง ==========
-def แยกคำสำคัญ(ข้อความ):
-    คำ = re.findall(r'\w+', ข้อความ)
-    keyword = ['เล่ม', 'ออก', 'เมื่อไหร่', 'ราคา', 'ซื้อ', 'สนุก', 'เบื่อ']
-    return [k for k in คำ if any(x in k for x in keyword)]
-
-def จับอารมณ์(ข้อความ):
-    if any(x in ข้อความ for x in ['เบื่อ','เมื่อไหร่','ช้า']): return "น้อยใจ"
-    if any(x in ข้อความ for x in ['สนุก','ชอบ','ดี']): return "ดีใจ"
-    if any(x in ข้อความ for x in ['ราคา','ซื้อ','ที่ไหน']): return "อยากซื้อ"
-    return "ทั่วไป"
-
-def จับเจตนา(คำสำคัญ):
-    if any(x in คำสำคัญ for x in ['เมื่อไหร่','ออก']): return "ถามความคืบหน้า"
-    if any(x in คำสำคัญ for x in ['ราคา','ซื้อ']): return "จะซื้อ"
-    return "พูดคุย"
-
-def หาข้อมูลในระบบ(คำสำคัญ):
-    # ตรงนี้ต่อไปบอสเอาไปต่อ DB ได้
-    if 'เล่ม3' in str(คำสำคัญ): 
-        return {"สถานะ": "เขียน 70%", "คาดว่า": "Q4 2026"}
-    return None
-
-def สร้างคำตอบ(ข้อมูล, อารมณ์, เจตนา):
-    if เจตนา == "ถามความคืบหน้า":
-        return f"เข้าใจความรู้สึกเลยครับ 🙏 ตอนนี้{ข้อมูล['สถานะ']}แล้ว คาดว่า{ข้อมูล['คาดว่า']}ได้อ่านแน่นอนครับ ขอบคุณที่รอนะครับ"
-    return "ขอบคุณสำหรับคอมเม้นครับ 🙏"
-
-def สันนิษฐานคำตอบ(เจตนา, อารมณ์, คำสำคัญ):
-    if อารมณ์ == "น้อยใจ":
-        return f"ขอโทษที่ให้รอนานนะครับ 🙇 ตอนนี้กำลังเร่งให้อยู่เลย ฝากติดตามเพจไว้นะครับ มีอัปเดตจะรีบแจ้งทันที"
-    if เจตนา == "จะซื้อ":
-        return "ทัก Inbox มาได้เลยครับ เดี๋ยวแอดมินส่งรายละเอียดให้ครับ 😊"
-    return "ขอบคุณมากๆครับที่แวะมาคุยกัน 🙏"
-
-def ตรวจความสุภาพ(คำตอบ):
-    return คำตอบ # ตรงนี้ต่อไปใส่ AI ตรวจคำหยาบได้
-
-# ========== ฟังก์ชั่นเดิม ==========
-def ดึงคอมเม้น():
-  try:
-    url = f"https://graph.facebook.com/v20.0/{PAGE_ID}/comments"
-    params = {"access_token": PAGE_ACCESS_TOKEN, "fields": "id,message"}
-    res = requests.get(url, params=params).json()
-    return res.get('data',[])
-  except: return []
-
-def ตอบกลับคอมเม้น(comment_id, ข้อความ):
-  url = f"https://graph.facebook.com/v20.0/{comment_id}/comments"
-  data = {"message": ข้อความ, "access_token": PAGE_ACCESS_TOKEN}
-  requests.post(url, data=data)
-
-def แจ้งไลน์(ข้อความ):
-  if LINE_TOKEN:
-    requests.post("https://notify-api.line.me/api/notify",
-      headers={"Authorization": f"Bearer {LINE_TOKEN}"},
-      data={"message": ข้อความ})
-import requests
-import os
-import re
-from datetime import datetime
-
-PAGE_ACCESS_TOKEN = os.environ.get("PAGE_ACCESS_TOKEN")
-PAGE_ID = os.environ.get("PAGE_ID")
-LINE_TOKEN = os.environ.get("LINE_TOKEN")
-
-# ========== สวิตช์สำคัญ ==========
-โหมด = "SANDBOX" # SANDBOX = เทสในระบบ, LIVE = ตอบจริง
-ความจำ = {}
-LOG_การเทส = []
-
-def งานหลัก(request):
-    print(f"[{datetime.now()}] AGI v4.1 โหมด: {โหมด}")
-    
-    เม้นทั้งหมด = ดึงคอมเม้น()
-    
-    for เม้น in เม้นทั้งหมด[:5]:
-        comment_id = เม้น['id']
-        user_id = เม้น.get('from',{}).get('id', 'guest')
-        ข้อความ = เม้น.get('message','')
-        ชื่อ = เม้น.get('from',{}).get('name','คุณ')
-
-        # ========== ขั้นตอนที่ 1: สร้างในระบบก่อน ==========
-        คำตอบ_ที่สร้าง = AGI_สมองรวม(user_id, ชื่อ, ข้อความ)
-        
-        # ========== ขั้นตอนที่ 2: QC ในระบบตัวเอง ==========
-        ผ่านQC = ตรวจสอบคุณภาพ(คำตอบ_ที่สร้าง, ข้อความ)
-        LOG_การเทส.append(f"คำถาม:{ข้อความ} | คำตอบ:{คำตอบ_ที่สร้าง} | QC:{ผ่านQC}")
-        
-        # ========== ขั้นตอนที่ 3: ตัดสินใจปล่อยออกนอก ==========
-        if โหมด == "LIVE" and ผ่านQC == "ผ่าน":
-            ตอบกลับคอมเม้น(comment_id, คำตอบ_ที่สร้าง) # ถึงจะตอบจริง
-            ผล = "ปล่อยจริง"
-        else:
-            ผล = "เก็บไว้ในระบบ" # ไม่ตอบจริง แค่บันทึก
-    
-    สรุป = f"เทส {len(LOG_การเทส)} อัน | ปล่อยจริง: {ผล}"
-    แจ้งไลน์(f"✅ AGI v4.1: {สรุป}\nLOGล่าสุด: {LOG_การเทส[-1]}")
-    return สรุป
-
-# ========== ระบบ QC ภายใน ==========
-def ตรวจสอบคุณภาพ(คำตอบ, คำถาม):
-    # กฏ1: ห้ามมีคำหยาบ
-    if any(x in คำตอบ for x in ['ด่า','โง่','ควาย']): return "ไม่ผ่าน"
-    # กฏ2: ถ้าถามซื้อ ต้องมีคำว่า Inbox
-    if 'ราคา' in คำถาม and 'Inbox' not in คำตอบ: return "ไม่ผ่าน"
-    # กฏ3: ห้ามตอบสั้นกว่า 10 ตัวอักษร
-    if len(คำตอบ) < 10: return "ไม่ผ่าน"
-    return "ผ่าน"
-
-# ========== สมองเดิม ==========
-def AGI_สมองรวม(user_id, ชื่อ, ข้อความ):
-    # ตรงนี้คือสมอง v4.0 ที่เราเทรน 7 สัญชาติญาณ
-    อารมณ์ = จับอารมณ์(ข้อความ)
-    if อารมณ์ == "โกรธ": return f"ขอโทษครับ{ชื่อ} 🙇 ผมรับฟังและจะปรับปรุงครับ"
-    if 'ราคา' in ข้อความ: return f"สวัสดีครับ{ชื่อ} 😊 รายละเอียดทัก Inbox ได้เลยครับ"
-    return f"ขอบคุณครับ{ชื่อ} 🙏 ดีใจที่แวะมาคุยกัน"
-
-def จับอารมณ์(ข้อความ):
-    if any(x in ข้อความ for x in ['เบื่อ','เมื่อไหร่','ช้า','ห่วย']): return "โกรธ"
-    return "ทั่วไป"
-
-# ========== ฟังก์ชั่นเดิม ==========
-def ดึงคอมเม้น():
-  try:
-    url = f"https://graph.facebook.com/v20.0/{PAGE_ID}/comments"
-    params = {"access_token": PAGE_ACCESS_TOKEN, "fields": "id,message,from"}
-    res = requests.get(url, params=params).json()
-    return res.get('data',[])
-  except: return []
-
-def ตอบกลับคอมเม้น(comment_id, ข้อความ):
-  url = f"https://graph.facebook.com/v20.0/{comment_id}/comments"
-  data = {"message": ข้อความ, "access_token": PAGE_ACCESS_TOKEN}
-  requests.post(url, data=data)
-
-def แจ้งไลน์(ข้อความ):
-  if LINE_TOKEN:
-    requests.post("https://notify-api.line.me/api/notify",
-      headers={"Authorization": f"Bearer {LINE_TOKEN}"},
-      data={"message": ข้อความ})
-import os, time, json, datetime
-from flask import Flask
-import threading
-
-# --- ตั้งค่า ---
-MEMORY_FILE = "memory.json"
-SOLUTIONS_DIR = "solutions"
-os.makedirs(SOLUTIONS_DIR, exist_ok=True)
-
-app = Flask(__name__)
-
-# ความจำระยะยาว
-def load_memory():
-    if os.path.exists(MEMORY_FILE):
-        with open(MEMORY_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    return []
-
-def save_memory(q, a):
-    mem = load_memory()
-    mem.append({"time": str(datetime.datetime.now()), "question": q, "answer": a})
-    with open(MEMORY_FILE, 'w', encoding='utf-8') as f:
-        json.dump(mem, f, ensure_ascii=False, indent=2)
-
-# --- สมอง AGI 5 ขั้น ---
-def agi_loop():
-    while True:
-        try:
-            print("\n[AGI] ตื่นแล้ว กำลังคิด...")
-            
-            # 1. คิดและตั้งคำถามเอง (Curiosity)
-            # ในเวอร์ชั่นเต็มตรงนี้จะต่อ LLM จริง ตอนนี้ใส่ตัวอย่างให้ดูก่อน
-            questions = [
-                "ทำไมการตกตะกอน Mg(OH)2 วันนี้ได้ 0.35kg น้อยกว่าปกติ 0.4kg?",
-                "มีวิธีเพิ่มความบริสุทธิ์ Li จาก 80% เป็น 90% โดยไม่เพิ่มต้นทุนไหม?",
-                "ถ้าเอาเศษ LA141A มาทำโครงโดรน จะลดน้ำหนักได้อีกกี่ %?",
-                "ลูกค้าบ่อกุ้งที่เชียงใหม่ อยากได้ Mg แบบไหนมากที่สุดตอนนี้?"
-            ]
-            import random
-            question = random.choice(questions)
-            print(f"[AGI] สงสัยว่า: {question}")
-
-            # 2. หาคำตอบเอง (Research) - ตรงนี้จะไปค้น Google/YouTube เอง
-            # ตัวอย่างคำตอบที่มันค้นเจอ
-            answer = f"จากการค้นหา: ต้องเช็ค pH ให้อยู่ที่ 9.5-10.0 และอุณหภูมิ 30-35C จะได้ตะกอนเยอะสุด"
-            print(f"[AGI] หาคำตอบเจอ: {answer}")
-
-            # 3. สร้างเอง (Builder) - เขียนโค้ด/แผนใหม่เอง
-            filename = f"{SOLUTIONS_DIR}/solution_{int(time.time())}.txt"
-            with open(filename, 'w', encoding='utf-8') as f:
-                f.write(f"คำถาม: {question}\nคำตอบ: {answer}\nเวลา: {datetime.datetime.now()}\n")
-            print(f"[AGI] สร้างไฟล์ใหม่แล้ว: {filename}")
-
-            # 4. จำไว้ (Memory)
-            save_memory(question, answer)
-
-            # 5. เตรียมตอบเจ้านาย
-            print(f"[AGI] พร้อมตอบเจ้านายแล้ว! ถ้าเจ้านายถามว่า 'เมื่อคืนทำอะไรไป' จะตอบได้ทันที")
-
-        except Exception as e:
-            print(f"[AGI] Error: {e}")
-
-        time.sleep(3600) # ตื่นทุก 1 ชั่วโมง คิดใหม่
-
-@app.route('/')
-def home():
-    mem = load_memory()
-    last = mem[-1] if mem else {"question": "ยังไม่เริ่มคิด", "answer": "-"}
-    return f"""
-    <h1>AGI โรงงาน LA141A หางดง รันอยู่ 24 ชม.</h1>
-    <p><b>คำถามล่าสุดที่มันสงสัยเอง:</b> {last['question']}</p>
-    <p><b>คำตอบที่มันหาเอง:</b> {last['answer']}</p>
-    <p>ดูความจำทั้งหมดที่ /memory</p>
-    """
-
-@app.route('/memory')
-def memory():
-    return load_memory()
-
-# สั่งให้ AGI ทำงานเบื้องหลังทันที
-threading.Thread(target=agi_loop, daemon=True).start()
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", "8000")))
