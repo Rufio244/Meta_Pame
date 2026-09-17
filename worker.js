@@ -52,3 +52,21 @@ export default {
     console.log("AGI ตื่นเองทุกชั่วโมงครับ");
   }
 }
+// ใน Worker หลักที่ Deploy แล้ว
+const GITHUB_RAW = "https://raw.githubusercontent.com/USER/REPO/main/KV_worker.js";
+
+async function loadPlugins() {
+  const res = await fetch(GITHUB_RAW + "?t=" + Date.now()); // กัน cache
+  const code = await res.text();
+  // เอาโค้ดจาก GitHub มารันเลย!
+  return code;
+}
+
+// เวลาเรียกใช้งาน
+export default {
+  async fetch(request) {
+    const pluginsCode = await loadPlugins();
+    // รันโค้ดจาก GitHub สดๆ ไม่ต้อง Deploy ใหม่!
+    return new Response("ดึงจาก GitHub แล้วรันแล้วครับ! " + pluginsCode.slice(0,100));
+  }
+}
