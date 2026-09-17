@@ -11,3 +11,4 @@ pyzbar
 opencv-python
 rapidfuzz
 python-jose[cryptography]
+flask
