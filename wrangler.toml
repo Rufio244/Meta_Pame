@@ -1,0 +1,7 @@
+name = "agi-hangdong"
+main = "worker.js"
+compatibility_date = "2026-09-17"
+
+# ตั้งให้มันตื่นเองทุกชั่วโมง
+[triggers]
+crons = ["0 * * * *"]
