@@ -22,7 +22,3 @@ git clone git@github.com:Rufio244/Meta_Pame.git && cd Meta_Pame && python Crista
 # AGI-HangDong-Core
 AGI ที่คิดเอง สงสัยเอง หาคำตอบเอง สร้างเองได้ 24 ชม.
 
-วิธีลง Render ฟรี:
-1. อัพ 2 ไฟล์นี้ขึ้น GitHub
-2. ไปที่ render.com -> New Web Service -> Connect Repo นี้
-3. กด Deploy -> จบ ได้ลิงก์ AGI ส่วนตัวทันที
