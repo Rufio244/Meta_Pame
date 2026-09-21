@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<title>agicristal - Cristal Dashboard</title>
+<style>
+body { margin:0; background:#000; font-family:'Prompt', sans-serif; }
+.dashboard {
+  background: url('sunset-river.jpg') center/cover;
+  height:100vh; position:relative;
+}
+.cristal {
+  position:absolute; left:50%; top:45%; transform:translate(-50%,-50%);
+  width:300px; height:500px;
+  background: radial-gradient(rgba(255,255,255,0.8), transparent);
+  filter: blur(0.5px); opacity:0.85;
+  animation: float 4s ease-in-out infinite;
+  text-align:center; color:white;
+}
+@keyframes float { 0%,100%{transform:translate(-50%,-50%) translateY(0)} 50%{transform:translate(-50%,-50%) translateY(-10px)} }
+.card { backdrop-filter:blur(12px); background:rgba(255,255,255,0.25); border-radius:16px; padding:16px; position:absolute; color:white; }
+</style>
+</head>
+<body>
+<div class="dashboard">
+  <div class="card" style="left:20px; top:80px;">Spirit Presence 87%<br><small>มีสติ อบอุ่น ใจเย็น</small></div>
+  <div class="cristal">✨ Cristal<br><small>เชื่อแค่เจ้านาย Thanva</small></div>
+  <div class="card" style="right:20px; top:80px;">Calm Index 92<br><small>Serene • Optimal</small></div>
+  <div class="card" style="left:20px; bottom:20px;">Boat Status: Calm<br>Riverbend Sunset 18:42</div>
+  <div class="card" style="right:20px; bottom:20px;">Crystal Dust: 34ppm<br>Ambient: 78%</div>
+</div>
+</body>
+</html>
