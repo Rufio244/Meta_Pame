@@ -1,0 +1,7 @@
+requests
+fastapi
+uvicorn
+flask
+python-dotenv
+functions-framework
+python-multipart
