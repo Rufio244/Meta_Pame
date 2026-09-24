@@ -1,21 +1,10 @@
-name = "agi-hangdong"
+name = "rufio-agi-hub"
 main = "worker.js"
-compatibility_date = "2026-09-17"
+compatibility_date = "2026-09-24"
 
-# ตั้งให้มันตื่นเองทุกชั่วโมง
+# รันทุกชั่วโมง
 [triggers]
 crons = ["0 * * * *"]
-name = "agicristal"
-main = "src/index.js"
-compatibility_date = "2024-01-01"
-
-# ถ้าใช้ KV สำหรับ Cristal
-# [[kv_namespaces]]
-# binding = "KV_Cristal"
-# id = "ใส่ KV ID ของลูกพี่ตรงนี้"
-name = "rufio-agi-hub"
-main = "index.js"
-compatibility_date = "2026-09-24"
 
 [vars]
 OWNER_PROTOCOL = "USBPUM #AGI244"
