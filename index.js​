@@ -1,0 +1,18 @@
+const SYSTEMS = {
+  // ... ระบบเดิม ...
+  
+  // ✅ เพิ่มแค่บรรทัดนี้:
+  "ระบบใหม่": {
+    path: "/new-system",
+    handler: handleNewSystem,
+    name: "ชื่อระบบใหม่",
+    description: "คำอธิบาย"
+  }
+}
+async function handleNewSystem(request, path, env, isOwner) {
+  return Response.json({
+    system: "ระบบใหม่",
+    status: "✅ ทำงานแล้ว",
+    message: "เพิ่มเสร็จแล้ว — Deploy ได้เลย!"
+  });
+}
