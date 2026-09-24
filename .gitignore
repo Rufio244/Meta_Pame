@@ -23,3 +23,5 @@ Cristal_Core/soul.json
 # แต่ให้เก็บตัวอย่างไว้
 !.env.example
 !data/.gitkeep
+node_modules
+.wrangler
